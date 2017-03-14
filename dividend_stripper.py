@@ -66,7 +66,6 @@ days_per_month = {'1' : '31',
 # The name to give the upcoming Ex-dividend dates file
 UPCOMING_EX_DATES = "./upcoming_ex_dates.txt"
 
-
 # Function to account for leap years
 def get_days_per_month(month, year):
     if month != '2' or (month == '2' and not calendar.isleap(int(year))):
@@ -143,51 +142,112 @@ def update_ex_div_dates(req_proxy):
 
 class stock_database:
     def __init__(self):
-        self.database_object = MySqldb.connect(host=DB_HOST, user=DB_USER, passwd=DB_PASSWD)
+        self.database_object = MySQLdb.connect(host=DB_HOST, user=DB_USER, passwd=DB_PASSWD)
 
-		# Attempt to use the existing stock database
-		if self.issue_db_command("USE %s;" % DB_STOCK_DATABASE) is False:
-			result = self.issue_db_command("CREATE DATABASE %s;" % DB_STOCK_DATABASE)
-			
-			# Need to handle an error here.  Right now, if the database fails,
-			# just terminate the program with an error
-			if result is False:
-				print "[ERROR]: Could not use the correct database."
-				sys.exit(1)
-			
-			result = self.issue_db_command("USE %s;" % DB_STOCK_DATABASE)
-			
-			if result is False:
-				print "[ERROR]: Could not use the correct database.  Create command failed."
-				sys.exit(1)
+        # Attempt to use the existing stock database
+        if self.issue_db_command("USE %s;" % DB_STOCK_DATABASE) is False:
+            result = self.issue_db_command("CREATE DATABASE %s;" % DB_STOCK_DATABASE)
+
+            # Need to handle an error here.  Right now, if the database fails,
+            # just terminate the program with an error
+            if result is False:
+                print "[ERROR]: Could not use the correct database."
+                sys.exit(1)
+
+            result = self.issue_db_command("USE %s;" % DB_STOCK_DATABASE)
+
+            if result is False:
+                print "[ERROR]: Could not use the correct database.  Create command failed."
+                sys.exit(1)
 
 
-	def issue_db_command(self, cmd):
-		"""
-		Issue a generic command denoted by cmd to the database.  Performs basic error checking
-		and loggs the result.  Returns the result of the command or False if it failed.
+    def issue_db_command(self, cmd):
+        """
+        Issue a generic command denoted by cmd to the database.  Performs basic error checking
+        and loggs the result.  Returns the result of the command or False if it failed.
 
-		"""
+        """
 
-		current_pointer = self.database_object.cursor()
-		
-		try:
-			# Execute the command
-			result = current_pointer.execute(cmd)
-			
-			self.database_object.commit()
-			
-			return current_pointer.fetchall()
-		except Exception as e:
-			# Replace this with a logger call
-			print "[ERROR]: Could not execute command: " + "\n"
-				+ "  - Message " + str(e[1]) + "\n"
-				+ "  - Command: " + str(cmd)
+        current_pointer = self.database_object.cursor()
 
-			return False
+        try:
+            # Execute the command
+            result = current_pointer.execute(cmd)
+
+            self.database_object.commit()
+
+            return current_pointer.fetchall()
+        except Exception as e:
+            # Replace this with a logger call
+            print "[ERROR]: Could not execute command: " + "\n"\
+                + "  - Message " + str(e[1]) + "\n"\
+                + "  - Command: " + str(cmd)
+
+            return False
+
+class dividend_stripper:
+    def __init__(self):
+        self.stock_database = stock_database()
+
+    def update_ex_div_dates(req_proxy):
+        save_stdout = sys.stdout
+        dev_null = open("/dev/null", "w")
+        sys.stdout = dev_null
+
+        upcoming_ex_data = None
+        while upcoming_ex_data is None:
+            upcoming_ex_data = req_proxy.generate_proxied_request("http://dividata.com/dividates")
+
+        dev_null.close()
+        sys.stdout = save_stdout
+
+        # Parse result from requests.get()
+        upcoming_ex_soup = BeautifulSoup(upcoming_ex_data.text, 'html5lib')
+
+        # The day titles are stored in thead sections.  All of the odd titles are useless.
+        # Filter them out
+        ex_dates = []
+        iterator = 0
+        for date in upcoming_ex_soup.find_all('thead'):
+            # Is the index even?  If it is, save the date
+            if iterator % 2 == 0:
+                ex_dates.append(date.text)
+
+            iterator = iterator + 1
+
+        ex_data_per_date = []
+
+        for set_of_stocks in upcoming_ex_soup.find_all('tbody'):
+            ex_data_per_date.append([(stock.find_all('td')[0].text, stock.find_all('td')[1].text, stock.find_all('td')[2].text,\
+                stock.find_all('td')[3].text, stock.find_all('td')[4].text, stock.find_all('td')[5].text)\
+                for stock in set_of_stocks.find_all('tr')])
+
+        # Open the file to write the dividend data to
+        dividend_file = open(UPCOMING_EX_DATES, "w+")
+
+        iterator = 0
+        for day in ex_data_per_date:
+            dividend_file.write("Date: " + ex_dates[iterator] + "\n")
+
+            for stock in day:
+                dividend_file.write("%s, %s, %s, %s, %s, %s\n" % (stock[0], stock[1], stock[2], stock[3], stock[4], stock[5]))
+
+            iterator = iterator + 1
+
+        dividend_file.close()
+
+class stock_database:
+    def __init__(self):
+
+
 
 
 def main(argc, argv):
+
+    div_stripper = dividend_stripper()
+
+
+
 
     # Set up proxy generator in order to prevent ipbans
     # Redirect stdout so that the proxy function doesn't print annoying functions to the screen
@@ -221,7 +281,7 @@ def main(argc, argv):
         pass
 
 
-
+    sys.exit(1)
 
 
 
@@ -252,12 +312,12 @@ def main(argc, argv):
             try:
                 ex_dividend_data = req_proxy.generate_proxied_request("http://dividata.com/stock/%s/dividend" % ticker)
             except Exception as e:
-				skip = True
-				break
-		
-		# If something went wrong collecting data, just go on to the next ticker
-		if skip is True:
-			continue
+                skip = True
+                break
+
+        # If something went wrong collecting data, just go on to the next ticker
+        if skip is True:
+            continue
 
             print "Data: %s" % ex_dividend_data
         print "Finished data collection"
