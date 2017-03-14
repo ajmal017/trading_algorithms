@@ -143,12 +143,11 @@ def update_ex_div_dates(req_proxy):
 
 class stock_database:
     def __init__(self):
-        self.database_object = MySqldb.connect(host=DB_HOST, user=DB_USER,
-            passwd=DB_PASSWD)
+        self.database_object = MySqldb.connect(host=DB_HOST, user=DB_USER, passwd=DB_PASSWD)
 
 		# Attempt to use the existing stock database
-		if self.issue_db_command("USE %s" % DB_STOCK_DATABASE) is False:
-			result = self.issue_db_command("CREATE DATABASE %s" % DB_STOCK_DATABASE)
+		if self.issue_db_command("USE %s;" % DB_STOCK_DATABASE) is False:
+			result = self.issue_db_command("CREATE DATABASE %s;" % DB_STOCK_DATABASE)
 			
 			# Need to handle an error here.  Right now, if the database fails,
 			# just terminate the program with an error
@@ -156,36 +155,36 @@ class stock_database:
 				print "[ERROR]: Could not use the correct database."
 				sys.exit(1)
 			
-			self.issue_db_command("USE %s" % DB_STOCK_DATABASE)
+			result = self.issue_db_command("USE %s;" % DB_STOCK_DATABASE)
 			
-			# CONTINUE HERE!!!
-			
+			if result is False:
+				print "[ERROR]: Could not use the correct database.  Create command failed."
+				sys.exit(1)
+
+
+	def issue_db_command(self, cmd):
+		"""
+		Issue a generic command denoted by cmd to the database.  Performs basic error checking
+		and loggs the result.  Returns the result of the command or False if it failed.
+
+		"""
+
+		current_pointer = self.database_object.cursor()
 		
-		# If it doesn't exist, create it
+		try:
+			# Execute the command
+			result = current_pointer.execute(cmd)
+			
+			self.database_object.commit()
+			
+			return current_pointer.fetchall()
+		except Exception as e:
+			# Replace this with a logger call
+			print "[ERROR]: Could not execute command: " + "\n"
+				+ "  - Message " + str(e[1]) + "\n"
+				+ "  - Command: " + str(cmd)
 
-        def issue_db_command(self, cmd):
-            """
-            Issue a generic command denoted by cmd to the database.  Performs basic error checking
-            and loggs the result.  Returns the result of the command or False if it failed.
-
-            """
-
-            current_pointer = self.database_object.cursor()
-            
-            try:
-				# Execute the command
-				result = current_pointer.execute(cmd)
-				
-				self.database_object.commit()
-				
-				return current_pointer.fetchall()
-			except Exception as e:
-				# Replace this with a logger call
-				print "[ERROR]: Could not execute command: " + "\n"
-					+ "  - Message " + str(e[1]) + "\n"
-					+ "  - Command: " + str(cmd)
-
-				return False
+			return False
 
 
 def main(argc, argv):
