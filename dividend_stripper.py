@@ -24,9 +24,14 @@ from http.requests.proxy.requestProxy import RequestProxy
 # Contain all data in a MySQL database
 import MySQLdb
 
+# Database login information.  Change this to fit your own parameters
+DB_HOST="127.0.0.1"
+DB_USER="root"
+DB_PASSWD="drew11"
+DB_STOCK_DATABASE="primary_stocks"
+
 # The current year.  I promise that this define makes sense
 CURRENT_YEAR = 2017
-
 
 # Month conversions
 MONTHS = {'jan' : '1',
@@ -136,6 +141,52 @@ def update_ex_div_dates(req_proxy):
 
     dividend_file.close()
 
+class stock_database:
+    def __init__(self):
+        self.database_object = MySqldb.connect(host=DB_HOST, user=DB_USER,
+            passwd=DB_PASSWD)
+
+		# Attempt to use the existing stock database
+		if self.issue_db_command("USE %s" % DB_STOCK_DATABASE) is False:
+			result = self.issue_db_command("CREATE DATABASE %s" % DB_STOCK_DATABASE)
+			
+			# Need to handle an error here.  Right now, if the database fails,
+			# just terminate the program with an error
+			if result is False:
+				print "[ERROR]: Could not use the correct database."
+				sys.exit(1)
+			
+			self.issue_db_command("USE %s" % DB_STOCK_DATABASE)
+			
+			# CONTINUE HERE!!!
+			
+		
+		# If it doesn't exist, create it
+
+        def issue_db_command(self, cmd):
+            """
+            Issue a generic command denoted by cmd to the database.  Performs basic error checking
+            and loggs the result.  Returns the result of the command or False if it failed.
+
+            """
+
+            current_pointer = self.database_object.cursor()
+            
+            try:
+				# Execute the command
+				result = current_pointer.execute(cmd)
+				
+				self.database_object.commit()
+				
+				return current_pointer.fetchall()
+			except Exception as e:
+				# Replace this with a logger call
+				print "[ERROR]: Could not execute command: " + "\n"
+					+ "  - Message " + str(e[1]) + "\n"
+					+ "  - Command: " + str(cmd)
+
+				return False
+
 
 def main(argc, argv):
 
@@ -166,6 +217,9 @@ def main(argc, argv):
 
 
     # Store all data in a MySQL database.
+    # Create a table for each stock.  Start by deleting any that are already there.
+    for ticker in tickers_to_test:
+        pass
 
 
 
@@ -199,7 +253,12 @@ def main(argc, argv):
             try:
                 ex_dividend_data = req_proxy.generate_proxied_request("http://dividata.com/stock/%s/dividend" % ticker)
             except Exception as e:
-
+				skip = True
+				break
+		
+		# If something went wrong collecting data, just go on to the next ticker
+		if skip is True:
+			continue
 
             print "Data: %s" % ex_dividend_data
         print "Finished data collection"
