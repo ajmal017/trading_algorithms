@@ -21,6 +21,9 @@ from yahoo_finance import Share
 # Proxy generator
 from http.requests.proxy.requestProxy import RequestProxy
 
+# Contain all data in a MySQL database
+import MySQLdb
+
 # The current year.  I promise that this define makes sense
 CURRENT_YEAR = 2017
 
@@ -87,16 +90,16 @@ def subtract_one_day(date_string):
 
 
 def update_ex_div_dates(req_proxy):
-    #save_stdout = sys.stdout
-    #dev_null = open("/dev/null", "w")
-    #sys.stdout = dev_null
+    save_stdout = sys.stdout
+    dev_null = open("/dev/null", "w")
+    sys.stdout = dev_null
 
     upcoming_ex_data = None
     while upcoming_ex_data is None:
         upcoming_ex_data = req_proxy.generate_proxied_request("http://dividata.com/dividates")
 
-    #dev_null.close()
-    #sys.stdout = save_stdout
+    dev_null.close()
+    sys.stdout = save_stdout
 
     # Parse result from requests.get()
     upcoming_ex_soup = BeautifulSoup(upcoming_ex_data.text, 'html5lib')
@@ -123,23 +126,15 @@ def update_ex_div_dates(req_proxy):
     dividend_file = open(UPCOMING_EX_DATES, "w+")
 
     iterator = 0
-    for day in ex_dates:
-        dividend_file.write(ex_dates[iterator] + "\n")
+    for day in ex_data_per_date:
+        dividend_file.write("Date: " + ex_dates[iterator] + "\n")
+
         for stock in day:
             dividend_file.write("%s, %s, %s, %s, %s, %s\n" % (stock[0], stock[1], stock[2], stock[3], stock[4], stock[5]))
 
         iterator = iterator + 1
 
-
-
     dividend_file.close()
-
-
-    import code; code.interact(local=locals())
-
-
-
-    pass
 
 
 def main(argc, argv):
@@ -159,10 +154,25 @@ def main(argc, argv):
     #tickers_to_test = ['XOM', 'BMY', 'EAT', 'KO', 'CRF', 'GLDI', 'GE']
     #tickers_to_test = ['GILD', 'AAT', 'AMOT', 'BBBY']
     #tickers_to_test = ['AIMC', 'ALOG', 'AME', 'ARII']
-    tickers_to_test = ['DOD', 'GILD']# 'DIA', 'XOM', 'GE']
-
+    tickers_to_test = ['ARII']# 'DIA', 'XOM', 'GE']
 
     update_ex_div_dates(req_proxy)
+
+    # Read in the tickers to check from the dividend file
+    dividend_file = open(UPCOMING_EX_DATES, "r")
+
+    for line in dividend_file.readlines():
+        tickers_to_test.append(line.split(',')[0].strip())
+
+
+    # Store all data in a MySQL database.
+
+
+
+
+
+
+
 
 
 
@@ -181,8 +191,16 @@ def main(argc, argv):
 
         print "Starting data collection"
         ex_dividend_data = None
+
+        # The requests proxy library sometimes throws some weird exceptions.  If that happens, break out of
+        # the loop and don't do anything.
+        skip = False
         while ex_dividend_data is None:
-            ex_dividend_data = req_proxy.generate_proxied_request("http://dividata.com/stock/%s/dividend" % ticker)
+            try:
+                ex_dividend_data = req_proxy.generate_proxied_request("http://dividata.com/stock/%s/dividend" % ticker)
+            except Exception as e:
+
+
             print "Data: %s" % ex_dividend_data
         print "Finished data collection"
 
